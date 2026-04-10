@@ -1,160 +1,206 @@
 import streamlit as st
 import pandas as pd
+from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="EV Worth-It Ranker", layout="wide")
 
-st.title("EV Worth-It Ranker")
-st.write("Upload a CSV of EVs sold or announced in Indonesia, adjust your priorities, and rank them from most worth it to least worth it.")
-
 REQUIRED_COLUMNS = [
-    "Brand","Model","Status","Segment","Price_IDR","Range_km","Battery_kWh","DC_Charge_kW",
-    "AC_Charge_kW","Power_hp","Torque_Nm","Seats","Length_mm","Width_mm","Height_mm",
-    "Wheelbase_mm","Ground_Clearance_mm","Warranty_Years","Source_URL","Notes"
+    "Brand", "Model", "Status", "Segment", "Price_IDR", "Range_km", "Battery_kWh", "DC_Charge_kW",
+    "AC_Charge_kW", "Power_hp", "Torque_Nm", "Seats", "Length_mm", "Width_mm", "Height_mm",
+    "Wheelbase_mm", "Ground_Clearance_mm", "Warranty_Years", "Personal_Rating_10", "Source_URL", "Notes"
 ]
 
 DEFAULT_ROWS = [
     {
-        "Brand": "BYD", "Model": "Seal", "Status": "On sale", "Segment": "Sedan",
-        "Price_IDR": 639000000, "Range_km": 650, "Battery_kWh": 82.56, "DC_Charge_kW": None,
-        "AC_Charge_kW": None, "Power_hp": None, "Torque_Nm": 670, "Seats": 5,
-        "Length_mm": None, "Width_mm": None, "Height_mm": None, "Wheelbase_mm": None,
-        "Ground_Clearance_mm": None, "Warranty_Years": None, "Source_URL": "https://www.byd.com/id/pricelist",
-        "Notes": "Example row"
+        "Brand": "BYD", "Model": "Dolphin", "Status": "On sale", "Segment": "Hatchback",
+        "Price_IDR": 425000000, "Range_km": 410, "Battery_kWh": 44.9, "DC_Charge_kW": 60,
+        "AC_Charge_kW": 7, "Power_hp": 94, "Torque_Nm": 180, "Seats": 5,
+        "Length_mm": 4290, "Width_mm": 1770, "Height_mm": 1570, "Wheelbase_mm": 2700,
+        "Ground_Clearance_mm": 130, "Warranty_Years": 8, "Personal_Rating_10": 7,
+        "Source_URL": "", "Notes": "Starter row; replace with your own verified data."
     },
     {
-        "Brand": "Hyundai", "Model": "KONA Electric", "Status": "On sale", "Segment": "SUV",
-        "Price_IDR": 565300000, "Range_km": 600, "Battery_kWh": None, "DC_Charge_kW": None,
-        "AC_Charge_kW": None, "Power_hp": None, "Torque_Nm": None, "Seats": 5,
-        "Length_mm": None, "Width_mm": None, "Height_mm": None, "Wheelbase_mm": None,
-        "Ground_Clearance_mm": None, "Warranty_Years": None, "Source_URL": "https://www.hyundai.com/id/id/find-a-car/all-new-kona-electric/highlights",
-        "Notes": "Example row"
-    },
-    {
-        "Brand": "NETA", "Model": "V-II", "Status": "On sale", "Segment": "Small SUV",
-        "Price_IDR": 299000000, "Range_km": None, "Battery_kWh": None, "DC_Charge_kW": None,
-        "AC_Charge_kW": None, "Power_hp": None, "Torque_Nm": None, "Seats": 5,
-        "Length_mm": None, "Width_mm": None, "Height_mm": None, "Wheelbase_mm": None,
-        "Ground_Clearance_mm": None, "Warranty_Years": None, "Source_URL": "https://neta.co.id/en/price-list",
-        "Notes": "Example row"
+        "Brand": "Wuling", "Model": "Cloud EV", "Status": "On sale", "Segment": "Hatchback",
+        "Price_IDR": 398000000, "Range_km": 460, "Battery_kWh": 50.6, "DC_Charge_kW": 50,
+        "AC_Charge_kW": 6.6, "Power_hp": 134, "Torque_Nm": 200, "Seats": 5,
+        "Length_mm": 4295, "Width_mm": 1850, "Height_mm": 1652, "Wheelbase_mm": 2700,
+        "Ground_Clearance_mm": 150, "Warranty_Years": 8, "Personal_Rating_10": 7,
+        "Source_URL": "", "Notes": "Starter row; replace with your own verified data."
     },
 ]
-default_df = pd.DataFrame(DEFAULT_ROWS)
-for col in REQUIRED_COLUMNS:
-    if col not in default_df.columns:
-        default_df[col] = None
-default_df = default_df[REQUIRED_COLUMNS]
 
-st.sidebar.header("1) Data source")
-uploaded_file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
+NUMERIC_COLUMNS = [
+    "Price_IDR", "Range_km", "Battery_kWh", "DC_Charge_kW", "AC_Charge_kW", "Power_hp", "Torque_Nm",
+    "Seats", "Length_mm", "Width_mm", "Height_mm", "Wheelbase_mm", "Ground_Clearance_mm",
+    "Warranty_Years", "Personal_Rating_10"
+]
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
+st.title("EV Worth-It Ranker")
+st.write("Persistent version backed by Google Sheets. Edit the table, press save, and your data stays there.")
+
+
+@st.cache_resource
+def get_connection():
+    return st.connection("gsheets", type=GSheetsConnection)
+
+
+def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
     for col in REQUIRED_COLUMNS:
         if col not in df.columns:
-            df[col] = None
+            df[col] = pd.NA
     df = df[REQUIRED_COLUMNS]
-    st.sidebar.success("CSV loaded.")
-else:
-    df = default_df.copy()
-    st.sidebar.info("No CSV uploaded. Using example rows.")
+    for col in NUMERIC_COLUMNS:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
 
-sample_csv = df.to_csv(index=False).encode("utf-8")
-st.sidebar.download_button("Download current table as CSV", data=sample_csv, file_name="ev_data_export.csv", mime="text/csv")
 
-st.sidebar.header("2) Priorities")
-weights = {
-    "Price_IDR": st.sidebar.slider("Price importance", 0, 30, 20),
-    "Range_km": st.sidebar.slider("Range importance", 0, 30, 20),
-    "Battery_kWh": st.sidebar.slider("Battery size importance", 0, 20, 10),
-    "DC_Charge_kW": st.sidebar.slider("DC charging speed importance", 0, 20, 10),
-    "Seats": st.sidebar.slider("Seat count importance", 0, 10, 4),
-    "Ground_Clearance_mm": st.sidebar.slider("Ground clearance importance", 0, 10, 3),
-    "Warranty_Years": st.sidebar.slider("Warranty importance", 0, 20, 8),
-}
+def load_sheet() -> pd.DataFrame:
+    conn = get_connection()
+    df = conn.read(worksheet=st.secrets["connections"]["gsheets"]["worksheet"], ttl=0)
+    if df is None or df.empty:
+        return clean_dataframe(pd.DataFrame(DEFAULT_ROWS))
+    return clean_dataframe(df)
 
-st.markdown("### Data editor")
-st.write("You can still edit the uploaded rows directly in the app.")
-df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
 
-st.markdown("### Filters")
-col1, col2, col3 = st.columns(3)
-with col1:
-    status_filter = st.multiselect("Status", sorted([s for s in df["Status"].dropna().unique()]), default=list(sorted([s for s in df["Status"].dropna().unique()])))
-with col2:
-    max_budget = st.number_input("Max budget (IDR)", min_value=0, value=10000000000, step=10000000)
-with col3:
-    min_range = st.number_input("Minimum range (km)", min_value=0, value=0, step=10)
+def save_sheet(df: pd.DataFrame) -> None:
+    conn = get_connection()
+    conn.update(
+        worksheet=st.secrets["connections"]["gsheets"]["worksheet"],
+        data=clean_dataframe(df),
+    )
 
-filtered = df.copy()
-if status_filter:
-    filtered = filtered[filtered["Status"].isin(status_filter)]
-filtered["Price_IDR"] = pd.to_numeric(filtered["Price_IDR"], errors="coerce")
-filtered["Range_km"] = pd.to_numeric(filtered["Range_km"], errors="coerce")
-filtered = filtered[(filtered["Price_IDR"].isna()) | (filtered["Price_IDR"] <= max_budget)]
-filtered = filtered[(filtered["Range_km"].isna()) | (filtered["Range_km"] >= min_range)]
 
-def normalize_series(series, higher_is_better=True):
+def normalize_series(series: pd.Series, higher_is_better: bool = True) -> pd.Series:
     series = pd.to_numeric(series, errors="coerce")
-    valid = series.dropna()
-    if len(valid) == 0:
-        return pd.Series([0.0] * len(series), index=series.index)
-    min_val = valid.min()
-    max_val = valid.max()
-    if max_val == min_val:
-        return pd.Series([10.0 if not pd.isna(v) else 0.0 for v in series], index=series.index)
-    if higher_is_better:
-        scored = 10 * (series - min_val) / (max_val - min_val)
-    else:
-        scored = 10 * (max_val - series) / (max_val - min_val)
-    return scored.fillna(0.0)
+    min_val = series.min()
+    max_val = series.max()
 
-def calculate_scores(data):
+    if pd.isna(min_val) or pd.isna(max_val):
+        return pd.Series([0] * len(series), index=series.index)
+    if max_val == min_val:
+        return pd.Series([10] * len(series), index=series.index)
+
+    if higher_is_better:
+        return 10 * (series - min_val) / (max_val - min_val)
+    return 10 * (max_val - series) / (max_val - min_val)
+
+
+def calculate_scores(data: pd.DataFrame, weights: dict) -> pd.DataFrame:
     scored = data.copy()
     scored["Score_Price"] = normalize_series(scored["Price_IDR"], higher_is_better=False)
     scored["Score_Range"] = normalize_series(scored["Range_km"], higher_is_better=True)
     scored["Score_Battery"] = normalize_series(scored["Battery_kWh"], higher_is_better=True)
     scored["Score_DC"] = normalize_series(scored["DC_Charge_kW"], higher_is_better=True)
-    scored["Score_Seats"] = normalize_series(scored["Seats"], higher_is_better=True)
-    scored["Score_GC"] = normalize_series(scored["Ground_Clearance_mm"], higher_is_better=True)
+    scored["Score_AC"] = normalize_series(scored["AC_Charge_kW"], higher_is_better=True)
+    scored["Score_Power"] = normalize_series(scored["Power_hp"], higher_is_better=True)
+    scored["Score_Torque"] = normalize_series(scored["Torque_Nm"], higher_is_better=True)
     scored["Score_Warranty"] = normalize_series(scored["Warranty_Years"], higher_is_better=True)
+    scored["Score_Personal"] = normalize_series(scored["Personal_Rating_10"], higher_is_better=True)
 
     total_weight = sum(weights.values())
     if total_weight == 0:
         scored["Final_Score"] = 0
-    else:
-        scored["Final_Score"] = (
-            scored["Score_Price"] * weights["Price_IDR"] +
-            scored["Score_Range"] * weights["Range_km"] +
-            scored["Score_Battery"] * weights["Battery_kWh"] +
-            scored["Score_DC"] * weights["DC_Charge_kW"] +
-            scored["Score_Seats"] * weights["Seats"] +
-            scored["Score_GC"] * weights["Ground_Clearance_mm"] +
-            scored["Score_Warranty"] * weights["Warranty_Years"]
-        ) / total_weight
+        return scored
 
-    scored = scored.sort_values("Final_Score", ascending=False, na_position="last").reset_index(drop=True)
+    scored["Final_Score"] = (
+        scored["Score_Price"] * weights["Price_IDR"]
+        + scored["Score_Range"] * weights["Range_km"]
+        + scored["Score_Battery"] * weights["Battery_kWh"]
+        + scored["Score_DC"] * weights["DC_Charge_kW"]
+        + scored["Score_AC"] * weights["AC_Charge_kW"]
+        + scored["Score_Power"] * weights["Power_hp"]
+        + scored["Score_Torque"] * weights["Torque_Nm"]
+        + scored["Score_Warranty"] * weights["Warranty_Years"]
+        + scored["Score_Personal"] * weights["Personal_Rating_10"]
+    ) / total_weight
+
+    scored = scored.sort_values("Final_Score", ascending=False).reset_index(drop=True)
     scored.index = scored.index + 1
     return scored
 
-st.markdown("### Ranking")
-if filtered.empty:
-    st.warning("No EVs match your filters.")
-else:
-    result = calculate_scores(filtered)
-    st.dataframe(
-        result[[
-            "Brand","Model","Status","Segment","Price_IDR","Range_km","Battery_kWh","DC_Charge_kW",
-            "Seats","Ground_Clearance_mm","Warranty_Years","Final_Score","Notes","Source_URL"
-        ]],
-        use_container_width=True
+
+if "sheet_df" not in st.session_state:
+    st.session_state.sheet_df = load_sheet()
+
+st.sidebar.header("Your priorities")
+weights = {
+    "Price_IDR": st.sidebar.slider("Price importance", 0, 30, 20),
+    "Range_km": st.sidebar.slider("Range importance", 0, 30, 20),
+    "Battery_kWh": st.sidebar.slider("Battery size importance", 0, 20, 6),
+    "DC_Charge_kW": st.sidebar.slider("DC charging importance", 0, 20, 10),
+    "AC_Charge_kW": st.sidebar.slider("AC charging importance", 0, 20, 4),
+    "Power_hp": st.sidebar.slider("Power importance", 0, 20, 8),
+    "Torque_Nm": st.sidebar.slider("Torque importance", 0, 20, 6),
+    "Warranty_Years": st.sidebar.slider("Warranty importance", 0, 20, 8),
+    "Personal_Rating_10": st.sidebar.slider("Personal feeling importance", 0, 20, 15),
+}
+
+st.markdown("### EV database")
+st.caption("Edits are local until you press Save changes to Google Sheets.")
+
+edited_df = st.data_editor(
+    st.session_state.sheet_df,
+    num_rows="dynamic",
+    use_container_width=True,
+    key="ev_editor",
+)
+
+col_a, col_b, col_c = st.columns([1, 1, 2])
+with col_a:
+    if st.button("Reload from Google Sheets", use_container_width=True):
+        st.session_state.sheet_df = load_sheet()
+        st.rerun()
+with col_b:
+    if st.button("Save changes to Google Sheets", type="primary", use_container_width=True):
+        try:
+            save_sheet(edited_df)
+            st.session_state.sheet_df = clean_dataframe(edited_df)
+            st.success("Saved to Google Sheets.")
+        except Exception as e:
+            st.error(f"Save failed: {e}")
+with col_c:
+    st.write("")
+
+st.markdown("### Filters")
+f1, f2, f3 = st.columns(3)
+with f1:
+    max_budget = st.number_input("Maximum budget (IDR)", min_value=0, value=1500000000, step=10000000)
+with f2:
+    min_range = st.number_input("Minimum range (km)", min_value=0, value=0, step=10)
+with f3:
+    status_filter = st.multiselect(
+        "Status",
+        options=sorted([x for x in edited_df["Status"].dropna().unique().tolist() if str(x).strip()]),
+        default=sorted([x for x in edited_df["Status"].dropna().unique().tolist() if str(x).strip()]),
     )
 
-    st.markdown("### Top pick")
-    top = result.iloc[0]
-    st.success(f"Best match right now: {top['Brand']} {top['Model']} — score {top['Final_Score']:.2f}/10")
+filtered_df = clean_dataframe(edited_df)
+filtered_df = filtered_df[filtered_df["Price_IDR"].fillna(0) <= max_budget]
+filtered_df = filtered_df[filtered_df["Range_km"].fillna(0) >= min_range]
+if status_filter:
+    filtered_df = filtered_df[filtered_df["Status"].isin(status_filter)]
 
-    st.markdown("### Quick compare")
-    st.write("Rows with a lot of missing specs are still shown, but missing values score as 0 until you fill them in.")
+st.markdown("### Ranking")
+if filtered_df.empty:
+    st.warning("No EVs match your current filters.")
+else:
+    result = calculate_scores(filtered_df, weights)
+    st.dataframe(
+        result[[
+            "Brand", "Model", "Status", "Price_IDR", "Range_km", "Battery_kWh", "DC_Charge_kW",
+            "AC_Charge_kW", "Power_hp", "Torque_Nm", "Warranty_Years", "Personal_Rating_10",
+            "Final_Score", "Notes"
+        ]],
+        use_container_width=True,
+    )
+
+    top = result.iloc[0]
+    st.success(f"Top pick: {top['Brand']} {top['Model']} — {top['Final_Score']:.2f}/10")
 
 st.markdown("---")
-st.caption("Tip: upload the Indonesia EV CSV, edit any missing specs, then re-download the cleaned file.")
+st.markdown("### Setup notes")
+st.code(
+    """[connections.gsheets]\nspreadsheet = \"YOUR_GOOGLE_SHEET_URL\"\nworksheet = \"EVs\"\n\n[gcp_service_account]\ntype = \"service_account\"\nproject_id = \"...\"\nprivate_key_id = \"...\"\nprivate_key = \"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n\"\nclient_email = \"...\"\nclient_id = \"...\"\nauth_uri = \"https://accounts.google.com/o/oauth2/auth\"\ntoken_uri = \"https://oauth2.googleapis.com/token\"\nauth_provider_x509_cert_url = \"https://www.googleapis.com/oauth2/v1/certs\"\nclient_x509_cert_url = \"...\"\nuniverse_domain = \"googleapis.com\"""",
+    language="toml",
+)
